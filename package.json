@@ -1,0 +1,23 @@
+{
+  "name": "hirfa",
+  "version": "1.0.0",
+  "private": true,
+  "description": "HIRFA — The Arab World's On-Demand Skilled Trades Platform",
+  "workspaces": [
+    "backend",
+    "customer-app",
+    "craftsman-app",
+    "admin-dashboard",
+    "shared"
+  ],
+  "scripts": {
+    "dev:backend": "npm run dev --workspace=backend",
+    "dev:admin": "npm run dev --workspace=admin-dashboard",
+    "build:all": "npm run build --workspaces",
+    "install:all": "npm install --workspaces"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
+}

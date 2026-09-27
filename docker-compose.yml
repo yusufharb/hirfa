@@ -1,0 +1,111 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────
+# HIRFA Local Development Stack
+# Run: docker-compose up -d
+# ─────────────────────────────────────────────
+
+services:
+  # ── PostgreSQL Database ──────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: hirfa_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: hirfa_user
+      POSTGRES_PASSWORD: hirfa_password_dev
+      POSTGRES_DB: hirfa_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hirfa_user -d hirfa_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis Cache ──────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: hirfa_redis
+    restart: unless-stopped
+    command: redis-server --requirepass hirfa_redis_dev --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "--auth", "hirfa_redis_dev", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Backend API ──────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: hirfa_backend
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - DATABASE_URL=postgresql://hirfa_user:hirfa_password_dev@postgres:5432/hirfa_db
+      - REDIS_URL=redis://:hirfa_redis_dev@redis:6379
+    env_file:
+      - ./backend/.env
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    command: npm run dev
+
+  # ── Admin Dashboard ──────────────────────────
+  admin:
+    build:
+      context: ./admin-dashboard
+      dockerfile: Dockerfile
+    container_name: hirfa_admin
+    restart: unless-stopped
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:3000
+    ports:
+      - "3001:3001"
+    depends_on:
+      - backend
+    volumes:
+      - ./admin-dashboard:/app
+      - /app/node_modules
+
+  # ── pgAdmin (Database GUI) ───────────────────
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: hirfa_pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@hirfa.app
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    profiles:
+      - tools # Only start with: docker-compose --profile tools up
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  default:
+    name: hirfa_network
